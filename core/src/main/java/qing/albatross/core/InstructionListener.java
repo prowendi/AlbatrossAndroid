@@ -15,7 +15,9 @@
  */
 package qing.albatross.core;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Member;
+import java.lang.reflect.Method;
 
 import qing.albatross.annotation.Alias;
 
@@ -23,6 +25,15 @@ import qing.albatross.annotation.Alias;
 public abstract class InstructionListener extends MethodInvokeFrame {
 
   long listenerId = 0;
+  public boolean traceReturn;
+
+  public InstructionListener(boolean traceReturn) {
+    this.traceReturn = traceReturn;
+  }
+
+  public InstructionListener() {
+    traceReturn = false;
+  }
 
   abstract public void onEnter(Member method, Object self, int dexPc, InvocationContext invocationContext);
 
@@ -41,7 +52,7 @@ public abstract class InstructionListener extends MethodInvokeFrame {
 
   //All these native methods register by Albatross.registerMethodNative
 
-  static native long hookInstructionNative(Member member, int minDexPc, int maxDexPc, Object callback);
+  static native long hookInstructionNative(Member member, int minDexPc, int maxDexPc, Object callback, boolean traceReturn);
 
   static native void unHookInstructionNative(long listenerId);
 
@@ -72,5 +83,19 @@ public abstract class InstructionListener extends MethodInvokeFrame {
   @Alias("onEnter")
   private void onEnter(Object self, int dexPc, long invocationContext) {
     onEnter(member, self, dexPc, new InvocationContext(invocationContext, this));
+  }
+
+  @Alias("onReturn")
+  private void onReturn(Object ret, int dexPc, long invocationContext) {
+    onReturn(member, ret, dexPc, new InvocationContext(invocationContext, this));
+  }
+
+  @Alias("onReturnPrim")
+  private void onReturnPrim(long ret, int dexPc, long invocationContext) {
+    if (member instanceof Constructor) {
+      onReturn(member, null, dexPc, new InvocationContext(invocationContext, this));
+    } else {
+      onReturn(member, boxPrim(((Method) member).getReturnType(), ret), dexPc, new InvocationContext(invocationContext, this));
+    }
   }
 }

@@ -306,7 +306,7 @@ public final class Albatross {
 
   public static native boolean registerOceanTracker(Class<?> ocean);
 
-  public static native boolean registerAlbNative(Class<?> AlbNative);
+  public static native boolean registerAlbNative(Class<?> AlbNative, Method m);
 
   public static boolean addAssignableHooker(Class<?> hooker, Class<?> targetClass) throws AlbatrossErr {
     int setResult = setHookerAssignableNative(hooker, targetClass);
@@ -603,13 +603,13 @@ public final class Albatross {
     if (Modifier.isStatic(member.getModifiers())) {
       ensureClassInitialized(member.getDeclaringClass());
     }
-    long listenerId = hookInstructionNative(member, minDexPc, maxDexPc, listener);
+    long listenerId = hookInstructionNative(member, minDexPc, maxDexPc, listener, listener.traceReturn);
     if (listenerId > 4096 || listenerId < 0) {
       listener.listenerId = listenerId;
       if (compile != DO_NOTHING) {
         compileClass(listener.getClass(), compile);
       }
-      listener.member = member;
+      listener.setMember(member);
       int codeSize = getMethodCodeSize(member);
       if (codeSize < inline_max_code_units && codeSize > 0) {
         transactionBegin();
@@ -834,6 +834,11 @@ public final class Albatross {
   private static class InstructionListenerH {
     @ByName("onEnter")
     static VoidMethodDef onEnter;
+    @ByName("onReturn")
+    static VoidMethodDef onReturn;
+
+    @ByName("onReturnPrim")
+    static VoidMethodDef onReturnPrim;
   }
 
   /**
@@ -895,6 +900,12 @@ public final class Albatross {
           return false;
         }
         hookClassInternal(InstructionListenerH.class, Albatross.class.getClassLoader(), InstructionListener.class, null);
+        Method ensureClassInitialized = $Image.ensureClassInitialized.method;
+        if (InitResultFlag.REPLACE_ENSURE_CLASS_INIT.isSet(initResult)) {
+          Method ensureClassInitializedVisibly = $Image.ensureClassInitializedForVisibly.method;
+          replace(ensureClassInitialized, ensureClassInitializedVisibly);
+          ensureClassInitialized = ensureClassInitializedVisibly;
+        }
         transactionBegin(false);
         try {
           hookClassInternal(ClassH.class, Class.class.getClassLoader(), Class.class, Albatross.class);
@@ -908,16 +919,10 @@ public final class Albatross {
           } else {
             hookClassInternal(BaseDexClassLoaderH.class, BaseDexClassLoader.class.getClassLoader(), BaseDexClassLoader.class, null);
           }
-          Method ensureClassInitialized = $Image.ensureClassInitialized.method;
-          if (InitResultFlag.REPLACE_ENSURE_CLASS_INIT.isSet(initResult)) {
-            Method ensureClassInitializedVisibly = $Image.ensureClassInitializedForVisibly.method;
-            replace(ensureClassInitialized, ensureClassInitializedVisibly);
-            ensureClassInitialized = ensureClassInitializedVisibly;
-          }
           ensureClassInitialized(MethodStubs.class);
           registerMethodNative(ensureClassInitialized, $Image.onClassInit.method,
               $Image.appendLoader.method, $Image.checkMethodReturn.method, InstructionListenerH.onEnter.method,
-              MethodStubs.class);
+              InstructionListenerH.onReturn.method, InstructionListenerH.onReturnPrim.method, MethodStubs.class);
           registerSearchCallback(SearchCallback.class.getDeclaredMethod("match", Object.class, int.class),
               FieldCallback.class.getDeclaredMethod("match", Member.class, int.class, int.class),
               SearchClassCallback.class.getDeclaredMethod("match", Class.class, long.class));
@@ -977,6 +982,7 @@ public final class Albatross {
           Albatross.hookClassInternal(MethodCallHook.Image.class, MethodCallHook.class.getClassLoader(), MethodCallHook.class, null);
           Albatross.hookClassInternal(ActivityThreadH.class, ActivityThread.getClassLoader(), ActivityThread, null);
         } finally {
+          //must init there
           toDecompileMethod = new HashSet<>();
           transactionEnd(true);
         }
@@ -984,8 +990,8 @@ public final class Albatross {
             MethodCallHook.Image.callShort.method, MethodCallHook.Image.callInt.method, MethodCallHook.Image.callFloat.method, MethodCallHook.Image.callLong.method,
             MethodCallHook.Image.callDouble.method, MethodCallHook.Image.callObject.method});
         measureLayoutNative(Albatross.class.getDeclaredMethod("insLayoutMeasure", int.class, int.class, int.class));
-        SafeToString.safeToString(null);
-        compileClass(SafeToString.class, NATIVE_CODE);
+//        SafeToString.safeToString(null);
+//        compileClass(SafeToString.class, NATIVE_CODE);
         compileClassByAnnotation(Albatross.class, DO_NOTHING);
 //        if (AppMetaInfo.packageName == null && (flags & FLAG_INJECT) == 0) {
 //          Application app = Albatross.currentApplication();
@@ -1501,8 +1507,8 @@ public final class Albatross {
       }
     }
     if (defaultClass != null) {
-      if (defaultClass.isInterface())
-        throw new HookInterfaceErr(defaultClass);
+//      if (defaultClass.isInterface())
+//        throw new HookInterfaceErr(defaultClass);
       if (!(defaultClass.getClassLoader() instanceof BaseDexClassLoader)) {
         addToVisit(defaultClass);
       } else if (targetClassAnno == null) {
@@ -1987,6 +1993,8 @@ public final class Albatross {
           throw new RequiredThisErr(m);
         }
       }
+      if (targetClass != null && targetClass.isInterface())
+        throw new HookInterfaceErr(targetClass);
 
       Class<?>[] argTypes;
       Method targetMethod = null;
@@ -2030,22 +2038,24 @@ public final class Albatross {
               name = getSplitValue(HOOK_SUFFIX, m.getName());
             else
               name = getSplitValue(BACKUP_SUFFIX, m.getName());
-            if ((methodOption & DefOption.VIRTUAL) == 0) {
-              targetMethod = ReflectUtils.findDeclaredMethodWithType(targetClass, name, e.argTypes, subArgTypes);
-              if (targetMethod == null) {
-                for (String alias : aliases) {
-                  targetMethod = ReflectUtils.findDeclaredMethodWithType(targetClass, alias, e.argTypes, subArgTypes);
-                  if (targetMethod != null)
-                    break;
+            if (targetClass != null) {
+              if ((methodOption & DefOption.VIRTUAL) == 0) {
+                targetMethod = ReflectUtils.findDeclaredMethodWithType(targetClass, name, e.argTypes, subArgTypes);
+                if (targetMethod == null) {
+                  for (String alias : aliases) {
+                    targetMethod = ReflectUtils.findDeclaredMethodWithType(targetClass, alias, e.argTypes, subArgTypes);
+                    if (targetMethod != null)
+                      break;
+                  }
                 }
-              }
-            } else {
-              targetMethod = ReflectUtils.findMethodWithType(targetClass, name, e.argTypes, subArgTypes);
-              if (targetMethod == null) {
-                for (String alias : aliases) {
-                  targetMethod = ReflectUtils.findMethodWithType(targetClass, alias, e.argTypes, subArgTypes);
-                  if (targetMethod != null)
-                    break;
+              } else {
+                targetMethod = ReflectUtils.findMethodWithType(targetClass, name, e.argTypes, subArgTypes);
+                if (targetMethod == null) {
+                  for (String alias : aliases) {
+                    targetMethod = ReflectUtils.findMethodWithType(targetClass, alias, e.argTypes, subArgTypes);
+                    if (targetMethod != null)
+                      break;
+                  }
                 }
               }
             }
@@ -2057,7 +2067,8 @@ public final class Albatross {
               continue;
             }
           } else {
-            targetConstructor = ReflectUtils.findDeclaredConstructorWithType(targetClass, e.argTypes, subArgTypes);
+            if (targetClass != null)
+              targetConstructor = ReflectUtils.findDeclaredConstructorWithType(targetClass, e.argTypes, subArgTypes);
             if (targetConstructor == null) {
               log("Cannot find target constructor  for " + m);
               if (methodRequired) {
@@ -2931,7 +2942,7 @@ public final class Albatross {
 
   //---------------------------------
 
-  private static native void registerMethodNative(Method ensureClassInitialized, Method onClassInit, Method appendLoaderMethod, Method compileCheck, Method onEnter, Class<?> stubClass);
+  private static native void registerMethodNative(Method ensureClassInitialized, Method onClassInit, Method appendLoaderMethod, Method compileCheck, Method onEnter, Method onExit, Method onExitPrim, Class<?> stubClass);
 
   private static native void registerSearchCallback(Method searchCallback, Method fieldCallback, Method classCallback);
 
@@ -3109,6 +3120,15 @@ public final class Albatross {
     return searchObjectNative(clz, callback);
   }
 
+  public static <T> List<T> searchObjects(Class<T> clz) {
+    List<T> objects = new ArrayList<>();
+    searchObject(clz, (o, i) -> {
+      objects.add(o);
+      return true;
+    });
+    return objects;
+  }
+
   public static int searchMethodCallerFromClass(Member method, Class<?> clz, SearchCallback<Member> callback, boolean pickFirst) {
     return searchMethodCallerNative(clz, method, callback, pickFirst, -2);
   }
@@ -3179,7 +3199,13 @@ public final class Albatross {
       classLoaderList.add(loader);
       if (toDecompileMethod != null)
         Albatross.getMainHandler().postDelayed(() -> {
-          Albatross.log("new classLoader append:" + loader);
+          String loaderName;
+          try {
+            loaderName = loader.toString();
+          } catch (Exception e) {
+            loaderName = loader.getClass().getName();
+          }
+          Albatross.log("new classLoader append:" + loaderName);
         }, 5000);
     }
     return true;
@@ -3203,7 +3229,7 @@ public final class Albatross {
   public static native String methodToString(Member member);
 
 
-  @TargetClass(className = "android.app.ActivityThread")
+  @TargetClass(className = "android.app.ActivityThread", targetExec = DO_NOTHING)
   public static class ActivityThreadH {
 
     @MethodBackup
@@ -3312,6 +3338,8 @@ public final class Albatross {
     }
     return null;
   }
+
+  synchronized static native boolean registerPropertyNative(String prop, String value);
 
   public static native Method findMethod(Class<?> clz, Class<?>[] argTypes, int isStatic);
 

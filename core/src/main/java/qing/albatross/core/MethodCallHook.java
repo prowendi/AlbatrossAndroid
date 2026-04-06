@@ -15,6 +15,8 @@
  */
 package qing.albatross.core;
 
+import static qing.albatross.annotation.ExecutionOption.DO_NOTHING;
+
 import android.util.ArrayMap;
 
 import java.lang.reflect.Constructor;
@@ -25,6 +27,7 @@ import java.util.Map;
 
 import qing.albatross.annotation.Alias;
 import qing.albatross.annotation.ByName;
+import qing.albatross.annotation.TargetClass;
 import qing.albatross.reflection.MethodDef;
 import qing.albatross.reflection.VoidMethodDef;
 
@@ -90,7 +93,7 @@ public class MethodCallHook {
     callback.call(new CallFrame(this, invocationContext));
   }
 
-
+  @TargetClass(targetExec = DO_NOTHING)
   static class Image {
     @ByName("callVoid")
     public static VoidMethodDef callVoid;

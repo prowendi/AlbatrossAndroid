@@ -15,6 +15,8 @@
  */
 package qing.albatross.common;
 
+import static qing.albatross.annotation.ExecutionOption.NATIVE_CODE;
+
 import android.util.ArraySet;
 
 import java.lang.reflect.Constructor;
@@ -219,6 +221,15 @@ public class SafeToString {
       return builder.append(TRUNCATED_SUFFIX_LIST);
     } else {
       return builder.append(']');
+    }
+  }
+
+  static boolean isCompiled = false;
+
+  public synchronized static void compile() {
+    if (!isCompiled) {
+      Albatross.compileClass(SafeToString.class, NATIVE_CODE);
+      isCompiled = true;
     }
   }
 }

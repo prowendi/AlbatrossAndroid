@@ -46,7 +46,7 @@ public class MethodInvokeFrame {
     }
   }
 
-  public  boolean unHook(){
+  public boolean unHook() {
     return false;
   }
 
@@ -393,5 +393,28 @@ public class MethodInvokeFrame {
     }
   }
 
+  public static Object boxPrim(Class<?> t, long value) {
+    Object valueObject;
+    if (t == int.class) {
+      valueObject = (int) value;
+    } else if (t == boolean.class) {
+      return value != 0;
+    } else if (t == char.class) {
+      valueObject = (char) value;
+    } else if (t == long.class) {
+      valueObject = value;
+    } else if (t == void.class || t == Void.class) {
+      return null;
+    } else if (t == float.class) {
+      valueObject = Float.intBitsToFloat((int) value);
+    } else if (t == double.class) {
+      valueObject = Double.longBitsToDouble(value);
+    } else if (t == byte.class) {
+      valueObject = (byte) value;
+    } else {
+      valueObject = (short) value;
+    }
+    return valueObject;
+  }
 
 }
