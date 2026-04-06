@@ -1,3 +1,7 @@
+version 3.5.0
+- Support hook method return.
+- Optimize the compatibility for Android 12
+
 version 3.4.0
 - Optimize the hooks for possible inline methods
 - Rpc parameters support byte arrays
