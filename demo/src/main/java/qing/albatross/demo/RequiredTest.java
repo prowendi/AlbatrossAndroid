@@ -55,10 +55,12 @@ public class RequiredTest {
     int ping();
   }
 
+  @MethodBackup
+  native int ping();
+
   static void test(boolean hook) {
     if (!hook)
       return;
-
     try {
       Albatross.hookClass(RequiredTest.class, F.class);
       assert false;

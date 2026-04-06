@@ -163,10 +163,19 @@ public class ReflectUtils {
   }
 
   public static Member findDeclaredMethodWithCount(Class<?> clazz, String name, int expectParamCount) throws NoSuchMethodException {
+    return findDeclaredMethodWithCount(clazz, name, expectParamCount, null);
+  }
+
+  public static Member findDeclaredMethodWithCount(Class<?> clazz, String name, int expectParamCount, String args) throws NoSuchMethodException {
     if (!"$init".equals(name)) {
       Method[] methods = clazz.getDeclaredMethods();
       for (Method method : methods) {
         if (method.getName().equals(name) && method.getParameterCount() == expectParamCount) {
+          if (args != null) {
+            String methodSign = Albatross.methodToString(method);
+            if (!methodSign.contains(args))
+              continue;
+          }
           return method;
         }
       }
@@ -175,12 +184,16 @@ public class ReflectUtils {
       Constructor<?>[] methods = clazz.getDeclaredConstructors();
       for (Constructor<?> method : methods) {
         if (method.getParameterTypes().length == expectParamCount) {
+          if (args != null) {
+            String methodSign = Albatross.methodToString(method);
+            if (!methodSign.contains(args))
+              continue;
+          }
           return method;
         }
       }
       throw new NoSuchMethodException("Constructor not found in " + clazz);
     }
-
   }
 
 
