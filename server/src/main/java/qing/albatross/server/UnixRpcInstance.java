@@ -17,7 +17,6 @@ package qing.albatross.server;
 
 import static qing.albatross.server.UnixRpcMethodFactory.ARG_BYTE;
 
-import android.app.Application;
 import android.util.ArrayMap;
 
 import java.nio.charset.StandardCharsets;
@@ -49,7 +48,6 @@ public abstract class UnixRpcInstance {
     Class<?> api = getApi();
     UnixRpcServer server = UnixRpcServer.create(socketPath, this, isAbstract, api);
     if (server != null) {
-      setServer(server);
       if (socketPath != null && socketPath.length() > 1) {
         server.setName(api.getName());
         server.start();
@@ -88,14 +86,14 @@ public abstract class UnixRpcInstance {
     return defaultValue;
   }
 
-  Map<Integer, UnixSession> clientMaps = new HashMap<>();
+  protected Map<Integer, UnixSession> clientMaps = new HashMap<>();
 
   void onNewConnection(long serverObj, int clientFd) {
     UnixSession session = new UnixSession(servers.get(serverObj), clientFd);
     clientMaps.put(clientFd, session);
   }
 
-  void onConnectionClose(long serverObj, int clientFd) {
+  protected void onConnectionClose(long serverObj, int clientFd) {
     if (clientFd > 0)
       clientMaps.remove(clientFd);
     else {

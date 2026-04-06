@@ -152,6 +152,8 @@ public class UnixRpcServer extends Thread {
 
   private native static int getSubscriberSize(long serverObj);
 
+  private native static int getConnectionSize(long serverObj);
+
   static native void registerCallback(Method onNewConnection, Method onConnectionClose, Method onClientClose);
 
   private static native int broadcastMessage(long serverObj, byte cmd, byte[] data, int dataLen);
