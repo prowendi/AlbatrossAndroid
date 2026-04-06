@@ -12,6 +12,7 @@ extern "C" {
 typedef struct InvocationContext InvocationContext;
 typedef void (*enter_listener)(InvocationContext *invocationContext, void *data);
 typedef void (*leave_listener)(InvocationContext *invocationContext, void *data);
+typedef void (*DetachCallback)(void *func, void *user_data);
 int AlbatrossTransactionBegin();
 int AlbatrossTransactionEnd();
 int AlbatrossGetVersion();
@@ -24,7 +25,7 @@ typedef enum {
 } InstrumentFlags;
 
 long AlbatrossHookInstrument(void *address, enter_listener on_enter, leave_listener on_leave,
-                             void *user_data, int instrumentFlags);
+                             DetachCallback on_detach,void *user_data, int instrumentFlags);
 unsigned long AlbatrossGetNthArgument(InvocationContext *invocationContext, int nth);
 unsigned long AlbatrossGetResult(InvocationContext *invocationContext);
 unsigned long AlbatrossGetSP(InvocationContext *invocationContext);
